@@ -31,7 +31,7 @@
     }
     .card:hover { border-color: #888; }
     .card.selected { border-color: #fff; border-width: 3px; }
-    .card canvas { image-rendering: pixelated; width: 128px; height: 128px; }
+    .card canvas { image-rendering: pixelated; image-rendering: crisp-edges; width: 128px; height: 128px; }
     .card .name { font-size: 14px; font-weight: bold; }
     .card .race-tag { font-size: 11px; padding: 2px 6px; border: 1px solid #666; text-transform: uppercase; letter-spacing: 1px; }
     .bottom-bar { display: flex; justify-content: space-between; align-items: center; width: 100%; margin-top: 16px; }
@@ -119,245 +119,965 @@ function generateName(race, rng) {
   return first.charAt(0).toUpperCase() + first.slice(1) + ' ' + last.charAt(0).toUpperCase() + last.slice(1);
 }
 
-// ── Race Templates (16 wide x 32 tall, left half only) ──
-// '#' = always filled, '.' = always empty, 'x' = variable (seed-driven)
-// Right edge (col 15) = character center. Col 0 = outermost edge after mirror.
-const RACE_TEMPLATES = {
-  // Human: Standard round head, normal neck, straight shoulders
-  Human: [
-    '................', // row 0  - empty top
-    '................', // row 1
-    '................', // row 2
-    '..........######', // row 3  - top of head
-    '.........#######', // row 4
-    '........########', // row 5  - head widens
-    '.......#########', // row 6
-    '.......####x####', // row 7  - forehead, variable hairline
-    '.......#########', // row 8  - brow
-    '.......##x##.###', // row 9  - eye area (gap=eye)
-    '.......#########', // row 10 - nose bridge
-    '.......####..x##', // row 11 - cheek area
-    '........####.x##', // row 12 - mouth area
-    '........########', // row 13 - chin
-    '.........#######', // row 14 - jaw line
-    '..........######', // row 15 - neck top
-    '...........#####', // row 16 - neck
-    '...........#####', // row 17 - neck base
-    '......##########', // row 18 - shoulders begin
-    '....############', // row 19 - shoulders widen
-    '..##############', // row 20 - full shoulders
-    '.###############', // row 21
-    '.###x###########', // row 22 - body with variable detail
-    '.###############', // row 23
-    '..#####x########', // row 24 - torso detail
-    '..##############', // row 25
-    '..##############', // row 26
-    '..##############', // row 27
-    '..##############', // row 28
-    '..##############', // row 29
-    '..##############', // row 30
-    '..##############', // row 31
-  ],
+// ── Drawing Primitives ──
+function setPixel(pixels, size, x, y, val) {
+  if (x >= 0 && x < size && y >= 0 && y < size) {
+    pixels[y * size + x] = val;
+  }
+}
 
-  // Tharn: Wide skull, bony ridges, thick neck, massive shoulders, heavy jaw
-  Tharn: [
-    '................', // row 0
-    '.........#......', // row 1  - cranial ridge tip
-    '........###.....', // row 2  - ridge widens
-    '.......####.#.##', // row 3  - ridge + dome top
-    '.......#########', // row 4  - skull top
-    '......##########', // row 5  - wide skull
-    '.....###########', // row 6
-    '.....######x####', // row 7  - brow ridge (heavy)
-    '.....###########', // row 8  - brow
-    '.....###x##.####', // row 9  - deep-set eye
-    '.....###########', // row 10 - nose area
-    '.....###########', // row 11 - heavy cheek
-    '....############', // row 12 - wide jaw
-    '....######x#.x##', // row 13 - jaw detail/tusks
-    '....############', // row 14 - jaw base
-    '.....###########', // row 15 - chin
-    '......##########', // row 16 - thick neck top
-    '.....###########', // row 17 - thick neck
-    '....############', // row 18 - neck to shoulder
-    '..##############', // row 19 - massive shoulders
-    '.###############', // row 20
-    '################', // row 21 - widest point
-    '################', // row 22
-    '###x############', // row 23 - armor/plate detail
-    '################', // row 24
-    '####x###########', // row 25 - body marking
-    '################', // row 26
-    '################', // row 27
-    '################', // row 28
-    '################', // row 29
-    '################', // row 30
-    '################', // row 31
-  ],
+function fillRect(pixels, size, x, y, w, h, val) {
+  for (let dy = 0; dy < h; dy++) {
+    for (let dx = 0; dx < w; dx++) {
+      setPixel(pixels, size, x + dx, y + dy, val);
+    }
+  }
+}
 
-  // Cephalid: Bulbous oversized dome, tentacles from lower face, thin neck
-  Cephalid: [
-    '................', // row 0
-    '..........######', // row 1  - dome top
-    '.......#########', // row 2  - dome widens fast
-    '.....###########', // row 3
-    '....############', // row 4  - very wide dome
-    '...#############', // row 5
-    '..##############', // row 6  - widest dome
-    '..##############', // row 7
-    '..####x#########', // row 8  - surface veins/texture
-    '..##############', // row 9
-    '...########.####', // row 10 - large eye area
-    '...#############', // row 11 - below eye
-    '....########x.##', // row 12 - face narrows
-    '.....########.##', // row 13 - tentacle roots
-    '......##.##.#.##', // row 14 - tentacles separate
-    '.......#..#.#.##', // row 15 - tentacles hang
-    '.......#..#.#..#', // row 16 - tentacles dangle
-    '........#.#..#.#', // row 17 - tentacle tips
-    '........#.#..#..', // row 18 - tentacle ends
-    '.........x...x..', // row 19 - tentacle tips variable
-    '................', // row 20 - gap
-    '...........#####', // row 21 - thin neck
-    '...........#####', // row 22
-    '.........#######', // row 23 - narrow shoulders
-    '........########', // row 24
-    '.......#########', // row 25 - modest body
-    '......##########', // row 26
-    '......##x#######', // row 27 - robe/clothing detail
-    '......##########', // row 28
-    '.....###########', // row 29
-    '.....###########', // row 30
-    '.....###########', // row 31
-  ],
+function fillEllipse(pixels, size, cx, cy, rx, ry, val) {
+  for (let dy = -ry; dy <= ry; dy++) {
+    for (let dx = -rx; dx <= rx; dx++) {
+      if ((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry) <= 1.0) {
+        setPixel(pixels, size, cx + dx, cy + dy, val);
+      }
+    }
+  }
+}
 
-  // Gravborn: Short/stocky, starts lower in frame, visor, respirator, very wide
-  Gravborn: [
-    '................', // row 0
-    '................', // row 1
-    '................', // row 2
-    '................', // row 3
-    '................', // row 4
-    '................', // row 5
-    '................', // row 6
-    '..........######', // row 7  - helmet/head top (starts low)
-    '.........#######', // row 8
-    '........########', // row 9  - head widens
-    '........########', // row 10
-    '.......#########', // row 11 - visor band
-    '.......####.####', // row 12 - visor slit (eye area)
-    '.......#########', // row 13 - visor band bottom
-    '.......###xx####', // row 14 - respirator top
-    '........##.#.###', // row 15 - respirator grille
-    '........##.#.###', // row 16 - respirator detail
-    '........########', // row 17 - mask base
-    '.........#######', // row 18 - neck (short)
-    '.....###########', // row 19 - shoulders (very wide for height)
-    '...#############', // row 20
-    '..##############', // row 21
-    '.###############', // row 22 - massive wide torso
-    '################', // row 23
-    '################', // row 24 - stocky body
-    '###x############', // row 25 - equipment detail
-    '################', // row 26
-    '####x###########', // row 27 - belt/tool detail
-    '################', // row 28
-    '################', // row 29
-    '################', // row 30
-    '################', // row 31
-  ],
+function hLine(pixels, size, x1, x2, y, val) {
+  const start = Math.min(x1, x2);
+  const end = Math.max(x1, x2);
+  for (let x = start; x <= end; x++) {
+    setPixel(pixels, size, x, y, val);
+  }
+}
 
-  // Insectoid: Antennae on top, narrow angular head, compound eye, segmented thorax
-  Insectoid: [
-    '..............#.', // row 0  - antenna tip left
-    '.............#..', // row 1  - antenna stalk
-    '............#...', // row 2  - antenna angles in
-    '...........#..##', // row 3  - antenna base + head top
-    '..........######', // row 4  - narrow head top
-    '..........######', // row 5
-    '.........#######', // row 6  - head
-    '.........##x####', // row 7  - compound eye area
-    '.........#.x####', // row 8  - compound eye dots
-    '.........#######', // row 9
-    '..........#####x', // row 10 - mandible area
-    '...........####.', // row 11 - narrow jaw
-    '...........###.#', // row 12 - mandible detail
-    '............####', // row 13 - thin neck
-    '............####', // row 14
-    '...........#####', // row 15 - thorax segment 1 top
-    '..........######', // row 16
-    '.........#######', // row 17 - thorax widens
-    '.........#######', // row 18 - segment 1
-    '..........######', // row 19 - segment joint (narrows)
-    '.........#######', // row 20 - segment 2
-    '........########', // row 21
-    '........########', // row 22 - widest thorax
-    '.........#######', // row 23 - segment joint
-    '........########', // row 24 - segment 3
-    '.......####x####', // row 25 - pattern detail
-    '.......#########', // row 26
-    '........########', // row 27 - segment joint
-    '.......#########', // row 28 - abdomen
-    '.......#########', // row 29
-    '........########', // row 30
-    '.........#######', // row 31 - abdomen tapers
-  ],
+function vLine(pixels, size, x, y1, y2, val) {
+  const start = Math.min(y1, y2);
+  const end = Math.max(y1, y2);
+  for (let y = start; y <= end; y++) {
+    setPixel(pixels, size, x, y, val);
+  }
+}
 
-  // Construct: Flat-top rectangle head, antenna/sensor, angular, boxy, geometric
-  Construct: [
-    '................', // row 0
-    '................', // row 1
-    '..............##', // row 2  - antenna top
-    '..............##', // row 3  - antenna stalk
-    '.............###', // row 4  - antenna base
-    '.........#######', // row 5  - flat head top (sharp edge)
-    '.........#######', // row 6
-    '.........#######', // row 7  - rectangular head
-    '.........#######', // row 8
-    '.........###.###', // row 9  - sensor/eye slot
-    '.........#######', // row 10
-    '.........###..##', // row 11 - speaker grille
-    '.........###..##', // row 12 - speaker grille
-    '.........#######', // row 13 - head bottom
-    '..........#####.', // row 14 - neck connector top
-    '...........####.', // row 15 - neck piston
-    '...........####.', // row 16 - neck piston
-    '..........#####.', // row 17 - neck connector bottom
-    '......##########', // row 18 - shoulder plate
-    '....############', // row 19 - angular shoulders
-    '...#############', // row 20
-    '...#############', // row 21 - boxy torso
-    '...#############', // row 22
-    '...###.#########', // row 23 - chest panel line
-    '...###.#########', // row 24
-    '...#############', // row 25
-    '...##.##########', // row 26 - panel detail
-    '...#############', // row 27
-    '...#############', // row 28
-    '...#############', // row 29
-    '...#############', // row 30
-    '...#############', // row 31
-  ],
+// Draw a filled triangle (flat-bottom or flat-top via 3 points)
+function fillTriangle(pixels, size, x0, y0, x1, y1, x2, y2, val) {
+  const minY = Math.min(y0, y1, y2);
+  const maxY = Math.max(y0, y1, y2);
+  for (let y = minY; y <= maxY; y++) {
+    let minX = size, maxX = 0;
+    const edges = [[x0,y0,x1,y1],[x1,y1,x2,y2],[x2,y2,x0,y0]];
+    for (const [ax, ay, bx, by] of edges) {
+      if ((ay <= y && by >= y) || (by <= y && ay >= y)) {
+        const dy = by - ay;
+        const x = dy === 0 ? Math.min(ax, bx) : ax + (y - ay) * (bx - ax) / dy;
+        minX = Math.min(minX, Math.floor(x));
+        maxX = Math.max(maxX, Math.ceil(x));
+      }
+    }
+    for (let x = minX; x <= maxX; x++) {
+      setPixel(pixels, size, x, y, val);
+    }
+  }
+}
+
+// Draw a circle outline
+function circleOutline(pixels, size, cx, cy, r, val) {
+  for (let a = 0; a < 360; a++) {
+    const rad = a * Math.PI / 180;
+    const x = Math.round(cx + r * Math.cos(rad));
+    const y = Math.round(cy + r * Math.sin(rad));
+    setPixel(pixels, size, x, y, val);
+  }
+}
+
+// Draw an ellipse outline
+function ellipseOutline(pixels, size, cx, cy, rx, ry, val) {
+  const steps = Math.max(rx, ry) * 8;
+  for (let i = 0; i < steps; i++) {
+    const a = (i / steps) * Math.PI * 2;
+    const x = Math.round(cx + rx * Math.cos(a));
+    const y = Math.round(cy + ry * Math.sin(a));
+    setPixel(pixels, size, x, y, val);
+  }
+}
+
+// ── Race Drawers ──
+// All drawing uses left-half coordinates (x: 0-63, center line at x=63).
+// The mirror step copies left to right after all drawing.
+// val=1 means filled (foreground), val=0 means cleared (background).
+
+const RACE_DRAWERS = {
+
+  // ════════════════════════════════════════════
+  //  HUMAN
+  // ════════════════════════════════════════════
+  Human: {
+    drawBody(pixels, size, rng) {
+      // Shoulders and torso (left half, mirrored later)
+      // Shoulder slope from neck down to edge
+      const shoulderTop = 66;
+      const shoulderWidth = 60; // from center
+      // Fill main torso block
+      fillRect(pixels, size, 64 - shoulderWidth, shoulderTop + 6, shoulderWidth, size - shoulderTop - 6, 1);
+      // Shoulder slope
+      for (let i = 0; i < 8; i++) {
+        const w = Math.floor(shoulderWidth * (i + 1) / 8);
+        hLine(pixels, size, 64 - w, 63, shoulderTop + i, 1);
+      }
+      // Jacket collar - V-shape cutout
+      for (let i = 0; i < 6; i++) {
+        setPixel(pixels, size, 63 - i, shoulderTop + 4 + i, 0);
+        if (i > 0) setPixel(pixels, size, 63 - i + 1, shoulderTop + 4 + i, 0);
+      }
+      // Lapel line
+      for (let i = 0; i < 10; i++) {
+        setPixel(pixels, size, 63 - 6 - Math.floor(i / 4), shoulderTop + 10 + i, 0);
+      }
+      // Shoulder seam line
+      const seamX = 64 - shoulderWidth + 8;
+      vLine(pixels, size, seamX, shoulderTop + 6, shoulderTop + 20, 0);
+      // Pocket on jacket
+      const pocketY = shoulderTop + 28;
+      hLine(pixels, size, 40, 52, pocketY, 0);
+      hLine(pixels, size, 40, 52, pocketY + 4, 0);
+      vLine(pixels, size, 40, pocketY, pocketY + 4, 0);
+      vLine(pixels, size, 52, pocketY, pocketY + 4, 0);
+      // Button
+      setPixel(pixels, size, 61, shoulderTop + 20, 0);
+      setPixel(pixels, size, 61, shoulderTop + 28, 0);
+      setPixel(pixels, size, 61, shoulderTop + 36, 0);
+    },
+    drawNeck(pixels, size, rng) {
+      fillRect(pixels, size, 50, 56, 14, 12, 1);
+      // Neck shading lines
+      vLine(pixels, size, 52, 58, 64, 0);
+    },
+    drawHead(pixels, size, rng) {
+      // Main head oval
+      fillEllipse(pixels, size, 57, 38, 22, 26, 1);
+      // Slight jaw narrowing - carve out lower sides
+      for (let y = 50; y < 56; y++) {
+        const carve = Math.floor((y - 50) * 1.5);
+        for (let x = 0; x < carve; x++) {
+          setPixel(pixels, size, 35 + x, y, 0);
+        }
+      }
+      // Chin definition
+      hLine(pixels, size, 44, 63, 55, 0);
+      // Ear
+      fillRect(pixels, size, 34, 35, 3, 8, 1);
+      setPixel(pixels, size, 33, 36, 1);
+      setPixel(pixels, size, 33, 37, 1);
+      setPixel(pixels, size, 33, 38, 1);
+      // Ear inner detail
+      setPixel(pixels, size, 35, 37, 0);
+      setPixel(pixels, size, 35, 38, 0);
+    },
+    drawFace(pixels, size, rng) {
+      // Eyebrows
+      hLine(pixels, size, 44, 50, 32, 0);
+      hLine(pixels, size, 44, 50, 33, 0);
+      hLine(pixels, size, 55, 61, 32, 0);
+      hLine(pixels, size, 55, 61, 33, 0);
+      // Slight brow arch
+      setPixel(pixels, size, 43, 33, 0);
+      setPixel(pixels, size, 54, 33, 0);
+
+      // Eyes - almond shape
+      // Left eye
+      fillRect(pixels, size, 44, 36, 7, 4, 0);
+      // Eye white (outline of socket)
+      hLine(pixels, size, 45, 49, 35, 0);
+      hLine(pixels, size, 45, 49, 40, 0);
+      // Pupil (filled dots in the eye socket)
+      setPixel(pixels, size, 47, 37, 1);
+      setPixel(pixels, size, 48, 37, 1);
+      setPixel(pixels, size, 47, 38, 1);
+      setPixel(pixels, size, 48, 38, 1);
+      // Eyelid line above
+      hLine(pixels, size, 44, 50, 35, 0);
+
+      // Right eye
+      fillRect(pixels, size, 55, 36, 7, 4, 0);
+      hLine(pixels, size, 56, 60, 35, 0);
+      hLine(pixels, size, 56, 60, 40, 0);
+      setPixel(pixels, size, 58, 37, 1);
+      setPixel(pixels, size, 59, 37, 1);
+      setPixel(pixels, size, 58, 38, 1);
+      setPixel(pixels, size, 59, 38, 1);
+      hLine(pixels, size, 55, 61, 35, 0);
+
+      // Nose
+      vLine(pixels, size, 53, 40, 46, 0);
+      vLine(pixels, size, 54, 40, 46, 0);
+      // Nose tip / nostril hint
+      setPixel(pixels, size, 51, 46, 0);
+      setPixel(pixels, size, 52, 46, 0);
+      setPixel(pixels, size, 55, 46, 0);
+      setPixel(pixels, size, 56, 46, 0);
+      // Nostril
+      setPixel(pixels, size, 51, 45, 0);
+      setPixel(pixels, size, 56, 45, 0);
+
+      // Mouth
+      hLine(pixels, size, 47, 60, 50, 0);
+      hLine(pixels, size, 48, 59, 51, 0);
+      // Lower lip highlight
+      hLine(pixels, size, 50, 57, 52, 0);
+      // Upper lip shape
+      setPixel(pixels, size, 53, 49, 0);
+      setPixel(pixels, size, 54, 49, 0);
+    },
+    drawHeadgear(pixels, size, rng) {
+      // Hair - varies by seed
+      const style = Math.floor(rng() * 4);
+      if (style === 0) {
+        // Short crop - just thicken the top of the head
+        fillRect(pixels, size, 38, 10, 26, 5, 1);
+        fillRect(pixels, size, 36, 14, 28, 3, 1);
+        // Textured top
+        for (let x = 38; x < 64; x += 2) {
+          setPixel(pixels, size, x, 10, 0);
+        }
+        for (let x = 39; x < 64; x += 3) {
+          setPixel(pixels, size, x, 12, 0);
+        }
+      } else if (style === 1) {
+        // Longer swept hair
+        fillRect(pixels, size, 34, 8, 30, 8, 1);
+        fillRect(pixels, size, 32, 14, 6, 20, 1);
+        // Hair texture
+        for (let y = 10; y < 34; y += 2) {
+          setPixel(pixels, size, 33, y, 0);
+        }
+        for (let y = 9; y < 16; y++) {
+          for (let x = 36; x < 64; x += 3) {
+            setPixel(pixels, size, x, y, 0);
+          }
+        }
+      } else if (style === 2) {
+        // Mohawk/tall hair
+        fillRect(pixels, size, 50, 4, 10, 10, 1);
+        fillRect(pixels, size, 48, 6, 14, 8, 1);
+        // Spike texture
+        for (let y = 4; y < 14; y++) {
+          setPixel(pixels, size, 54, y, 0);
+          setPixel(pixels, size, 58, y, 0);
+        }
+      } else {
+        // Buzzcut / bald with stubble texture
+        for (let x = 40; x < 64; x += 2) {
+          for (let y = 12; y < 18; y += 2) {
+            setPixel(pixels, size, x, y, 0);
+          }
+        }
+      }
+    },
+    drawDetails(pixels, size, rng) {
+      // Maybe add a scar
+      if (rng() > 0.6) {
+        const scarY = 36 + Math.floor(rng() * 10);
+        vLine(pixels, size, 42, scarY, scarY + 6, 0);
+        setPixel(pixels, size, 41, scarY + 1, 0);
+        setPixel(pixels, size, 43, scarY + 5, 0);
+      }
+      // Stubble dots on chin area
+      if (rng() > 0.5) {
+        for (let y = 48; y < 55; y += 2) {
+          for (let x = 48; x < 62; x += 3) {
+            setPixel(pixels, size, x, y, 0);
+          }
+        }
+      }
+    }
+  },
+
+  // ════════════════════════════════════════════
+  //  THARN
+  // ════════════════════════════════════════════
+  Tharn: {
+    drawBody(pixels, size, rng) {
+      // Massive shoulders - wider than head
+      const shoulderTop = 65;
+      // Fill enormous torso
+      fillRect(pixels, size, 0, shoulderTop + 10, 64, size - shoulderTop - 10, 1);
+      // Shoulder slope - very wide
+      for (let i = 0; i < 12; i++) {
+        const w = Math.floor(64 * (i + 1) / 12);
+        hLine(pixels, size, 64 - w, 63, shoulderTop + i, 1);
+      }
+      // Armor plate on shoulder - raised ridge
+      fillRect(pixels, size, 4, shoulderTop + 10, 20, 3, 0);
+      fillRect(pixels, size, 2, shoulderTop + 8, 24, 2, 1);
+      // Armor plate lines
+      hLine(pixels, size, 2, 25, shoulderTop + 7, 0);
+      hLine(pixels, size, 2, 25, shoulderTop + 10, 0);
+      // Rivets on armor
+      for (let x = 4; x < 24; x += 4) {
+        setPixel(pixels, size, x, shoulderTop + 9, 0);
+      }
+      // Chest plate
+      hLine(pixels, size, 30, 63, shoulderTop + 16, 0);
+      hLine(pixels, size, 30, 63, shoulderTop + 17, 0);
+      // Chest cross-strap
+      for (let i = 0; i < 20; i++) {
+        setPixel(pixels, size, 40 + Math.floor(i * 1.1), shoulderTop + 18 + i, 0);
+        setPixel(pixels, size, 41 + Math.floor(i * 1.1), shoulderTop + 18 + i, 0);
+      }
+      // Belt
+      hLine(pixels, size, 0, 63, shoulderTop + 40, 0);
+      hLine(pixels, size, 0, 63, shoulderTop + 41, 0);
+      hLine(pixels, size, 0, 63, shoulderTop + 43, 0);
+      // Belt buckle
+      fillRect(pixels, size, 56, shoulderTop + 38, 7, 7, 0);
+      fillRect(pixels, size, 58, shoulderTop + 39, 3, 5, 1);
+    },
+    drawNeck(pixels, size, rng) {
+      // Very thick neck
+      fillRect(pixels, size, 38, 56, 26, 12, 1);
+      // Neck tendons
+      vLine(pixels, size, 42, 58, 66, 0);
+      vLine(pixels, size, 48, 57, 66, 0);
+    },
+    drawHead(pixels, size, rng) {
+      // Massive wide skull
+      fillEllipse(pixels, size, 50, 38, 30, 25, 1);
+      // Heavy brow ridge - thick protruding bar
+      fillRect(pixels, size, 20, 30, 44, 5, 1);
+      // Brow ridge shadow underneath
+      hLine(pixels, size, 22, 63, 35, 0);
+      // Squared-off jaw
+      fillRect(pixels, size, 24, 46, 40, 10, 1);
+      // Jaw edge definition
+      vLine(pixels, size, 24, 46, 56, 0);
+      hLine(pixels, size, 24, 63, 56, 0);
+    },
+    drawFace(pixels, size, rng) {
+      // Deep-set small eyes under heavy brow
+      // Left eye - small, recessed
+      fillRect(pixels, size, 34, 36, 5, 3, 0);
+      setPixel(pixels, size, 36, 37, 1); // pupil dot
+      setPixel(pixels, size, 37, 37, 1);
+      // Right eye
+      fillRect(pixels, size, 48, 36, 5, 3, 0);
+      setPixel(pixels, size, 50, 37, 1);
+      setPixel(pixels, size, 51, 37, 1);
+
+      // Broad flat nose
+      fillRect(pixels, size, 44, 40, 8, 6, 0);
+      // Nose bridge
+      vLine(pixels, size, 47, 38, 40, 0);
+      vLine(pixels, size, 48, 38, 40, 0);
+      // Nostrils
+      fillRect(pixels, size, 44, 44, 3, 2, 0);
+      fillRect(pixels, size, 49, 44, 3, 2, 0);
+
+      // Heavy jaw with tusk protrusions
+      // Mouth - wide gash
+      hLine(pixels, size, 38, 58, 49, 0);
+      hLine(pixels, size, 40, 56, 50, 0);
+      // Tusks protruding downward from lower jaw
+      fillRect(pixels, size, 32, 52, 3, 6, 1);
+      fillRect(pixels, size, 33, 57, 1, 2, 1);
+      // Tusk shading
+      setPixel(pixels, size, 32, 53, 0);
+      setPixel(pixels, size, 32, 55, 0);
+      // Second tusk closer to center
+      fillRect(pixels, size, 42, 53, 2, 4, 1);
+    },
+    drawHeadgear(pixels, size, rng) {
+      // Cranial ridges - bony protrusions extending UP from skull
+      const ridgeCount = 2 + Math.floor(rng() * 2); // 2-3 ridges
+      for (let r = 0; r < ridgeCount; r++) {
+        const rx = 40 + r * 10;
+        const ridgeH = 14 + Math.floor(rng() * 6);
+        // Each ridge is a vertical fin
+        fillRect(pixels, size, rx, 24 - ridgeH, 4, ridgeH, 1);
+        // Ridge taper at top
+        fillRect(pixels, size, rx + 1, 22 - ridgeH, 2, 3, 1);
+        // Ridge texture - horizontal lines
+        for (let y = 24 - ridgeH; y < 24; y += 3) {
+          hLine(pixels, size, rx, rx + 3, y, 0);
+        }
+      }
+      // Brow ridge texture
+      for (let x = 22; x < 64; x += 4) {
+        setPixel(pixels, size, x, 31, 0);
+        setPixel(pixels, size, x, 32, 0);
+      }
+    },
+    drawDetails(pixels, size, rng) {
+      // War paint / tribal scars
+      if (rng() > 0.4) {
+        // Three diagonal scratches on cheek
+        for (let i = 0; i < 3; i++) {
+          for (let j = 0; j < 5; j++) {
+            setPixel(pixels, size, 28 + i * 3 + j, 42 + j, 0);
+          }
+        }
+      }
+      // Skin texture - rough dots
+      for (let y = 36; y < 55; y += 4) {
+        for (let x = 25; x < 60; x += 6) {
+          if (rng() > 0.5) setPixel(pixels, size, x, y, 0);
+        }
+      }
+    }
+  },
+
+  // ════════════════════════════════════════════
+  //  CEPHALID
+  // ════════════════════════════════════════════
+  Cephalid: {
+    drawBody(pixels, size, rng) {
+      // Narrow shoulders under robes
+      const shoulderTop = 82;
+      // Robe body - flowing, narrower than head
+      for (let y = shoulderTop; y < size; y++) {
+        const progress = (y - shoulderTop) / (size - shoulderTop);
+        const w = Math.floor(30 + progress * 15);
+        hLine(pixels, size, 64 - w, 63, y, 1);
+      }
+      // Robe fold lines
+      for (let y = shoulderTop + 4; y < size; y += 2) {
+        setPixel(pixels, size, 40, y, 0);
+      }
+      for (let y = shoulderTop + 6; y < size; y += 3) {
+        setPixel(pixels, size, 50, y, 0);
+      }
+      // Robe collar / clasp
+      fillRect(pixels, size, 54, shoulderTop, 8, 3, 1);
+      fillRect(pixels, size, 55, shoulderTop + 1, 6, 1, 0);
+      // Robe trim at shoulders
+      hLine(pixels, size, 34, 63, shoulderTop + 3, 0);
+    },
+    drawNeck(pixels, size, rng) {
+      // Thin neck (mostly hidden behind tentacles)
+      fillRect(pixels, size, 52, 72, 12, 12, 1);
+    },
+    drawHead(pixels, size, rng) {
+      // Huge bulbous dome - wider than body
+      // Main dome
+      fillEllipse(pixels, size, 48, 28, 38, 30, 1);
+      // Extended dome top for bulbous shape
+      fillEllipse(pixels, size, 50, 18, 30, 18, 1);
+      // Dome highlight contour
+      ellipseOutline(pixels, size, 50, 18, 28, 16, 0);
+      // Clean up the outline so it's just a hint, not full border
+      // Restore most of it, keep just the top highlight
+      fillEllipse(pixels, size, 50, 20, 26, 14, 1);
+    },
+    drawFace(pixels, size, rng) {
+      // Large almond-shaped eyes
+      // Left eye
+      fillEllipse(pixels, size, 36, 34, 8, 5, 0);
+      // Inner eye glow
+      fillEllipse(pixels, size, 37, 34, 4, 2, 1);
+      // Pupil
+      setPixel(pixels, size, 38, 34, 0);
+      setPixel(pixels, size, 37, 34, 0);
+
+      // Right eye
+      fillEllipse(pixels, size, 56, 34, 8, 5, 0);
+      fillEllipse(pixels, size, 57, 34, 4, 2, 1);
+      setPixel(pixels, size, 57, 34, 0);
+      setPixel(pixels, size, 58, 34, 0);
+
+      // No nose - smooth face
+
+      // Tentacles hanging down from lower face (4-6 tendrils)
+      const tentCount = 4 + Math.floor(rng() * 3);
+      const tentStartY = 48;
+      const tentSpacing = Math.floor(24 / tentCount);
+      for (let t = 0; t < tentCount; t++) {
+        const tx = 38 + t * tentSpacing;
+        const tentLen = 18 + Math.floor(rng() * 10);
+        // Each tentacle: 2-3px wide, wavy
+        for (let ty = 0; ty < tentLen; ty++) {
+          const wave = Math.round(Math.sin(ty * 0.4 + t * 1.5) * 2);
+          setPixel(pixels, size, tx + wave, tentStartY + ty, 1);
+          setPixel(pixels, size, tx + wave + 1, tentStartY + ty, 1);
+          // Thicker at base
+          if (ty < tentLen / 3) {
+            setPixel(pixels, size, tx + wave + 2, tentStartY + ty, 1);
+          }
+          // Sucker dots on tentacles
+          if (ty % 4 === 2 && ty > 2) {
+            setPixel(pixels, size, tx + wave + 1, tentStartY + ty, 0);
+          }
+        }
+        // Tentacle tip tapers
+        setPixel(pixels, size, tx, tentStartY + tentLen, 1);
+      }
+    },
+    drawHeadgear(pixels, size, rng) {
+      // Smooth dome - add vein lines
+      const veinCount = 3 + Math.floor(rng() * 3);
+      for (let v = 0; v < veinCount; v++) {
+        let vx = 30 + Math.floor(rng() * 30);
+        let vy = 5 + Math.floor(rng() * 15);
+        const veinLen = 8 + Math.floor(rng() * 12);
+        for (let i = 0; i < veinLen; i++) {
+          setPixel(pixels, size, vx, vy + i, 0);
+          vx += Math.round(rng() * 2 - 1);
+          // Branch
+          if (i === Math.floor(veinLen / 2) && rng() > 0.5) {
+            const branchDir = rng() > 0.5 ? 1 : -1;
+            for (let b = 0; b < 4; b++) {
+              setPixel(pixels, size, vx + branchDir * b, vy + i + b, 0);
+            }
+          }
+        }
+      }
+    },
+    drawDetails(pixels, size, rng) {
+      // Subtle dome texture - faint spots
+      for (let i = 0; i < 8; i++) {
+        const dx = 25 + Math.floor(rng() * 35);
+        const dy = 8 + Math.floor(rng() * 25);
+        setPixel(pixels, size, dx, dy, 0);
+      }
+      // Eye ridge / brow area definition
+      hLine(pixels, size, 28, 44, 28, 0);
+      hLine(pixels, size, 48, 63, 28, 0);
+    }
+  },
+
+  // ════════════════════════════════════════════
+  //  GRAVBORN
+  // ════════════════════════════════════════════
+  Gravborn: {
+    drawBody(pixels, size, rng) {
+      // VERY wide bulky suit body
+      const shoulderTop = 58;
+      // Fill massive torso
+      fillRect(pixels, size, 0, shoulderTop + 12, 64, size - shoulderTop - 12, 1);
+      // Wide shoulder slope
+      for (let i = 0; i < 14; i++) {
+        const w = Math.floor(64 * (i + 1) / 14);
+        hLine(pixels, size, 64 - w, 63, shoulderTop + i, 1);
+      }
+      // Suit collar - thick
+      fillRect(pixels, size, 46, shoulderTop, 18, 6, 1);
+      hLine(pixels, size, 46, 63, shoulderTop - 1, 1);
+
+      // Equipment/utility belt
+      const beltY = shoulderTop + 42;
+      hLine(pixels, size, 0, 63, beltY, 0);
+      hLine(pixels, size, 0, 63, beltY + 1, 0);
+      hLine(pixels, size, 0, 63, beltY + 3, 0);
+      hLine(pixels, size, 0, 63, beltY + 4, 0);
+      // Belt pouches
+      fillRect(pixels, size, 8, beltY + 1, 8, 3, 1);
+      fillRect(pixels, size, 20, beltY + 1, 6, 3, 1);
+      fillRect(pixels, size, 30, beltY + 1, 5, 3, 1);
+
+      // Suit panel lines
+      vLine(pixels, size, 20, shoulderTop + 14, beltY - 2, 0);
+      vLine(pixels, size, 40, shoulderTop + 14, beltY - 2, 0);
+      // Chest pocket
+      fillRect(pixels, size, 42, shoulderTop + 16, 10, 8, 0);
+      fillRect(pixels, size, 44, shoulderTop + 17, 6, 6, 1);
+      // Name badge on chest
+      fillRect(pixels, size, 44, shoulderTop + 18, 5, 2, 0);
+
+      // Arm/sleeve seam
+      vLine(pixels, size, 6, shoulderTop + 12, size - 1, 0);
+    },
+    drawNeck(pixels, size, rng) {
+      // Very short thick neck (barely visible)
+      fillRect(pixels, size, 44, 52, 20, 8, 1);
+    },
+    drawHead(pixels, size, rng) {
+      // Mining helmet dome
+      fillEllipse(pixels, size, 54, 38, 22, 18, 1);
+      // Helmet flat bottom
+      fillRect(pixels, size, 32, 38, 32, 14, 1);
+      // Helmet rim
+      hLine(pixels, size, 30, 63, 52, 1);
+      hLine(pixels, size, 30, 63, 53, 1);
+      hLine(pixels, size, 30, 63, 54, 0);
+      // Helmet top ridge
+      hLine(pixels, size, 40, 63, 20, 1);
+      hLine(pixels, size, 38, 63, 21, 1);
+      fillRect(pixels, size, 36, 22, 28, 2, 1);
+    },
+    drawFace(pixels, size, rng) {
+      // Visor: bright band across eyes
+      const visorY = 38;
+      fillRect(pixels, size, 33, visorY, 31, 5, 0);
+      // Visor glass (filled band inside)
+      fillRect(pixels, size, 35, visorY + 1, 27, 3, 1);
+      // Visor reflection highlights
+      hLine(pixels, size, 38, 45, visorY + 1, 0);
+      setPixel(pixels, size, 50, visorY + 2, 0);
+      setPixel(pixels, size, 52, visorY + 2, 0);
+
+      // Respirator mask covering lower face
+      fillRect(pixels, size, 36, 44, 28, 10, 1);
+      // Respirator grille - horizontal slits
+      for (let y = 45; y < 53; y += 2) {
+        hLine(pixels, size, 38, 62, y, 0);
+      }
+      // Respirator side vents
+      fillRect(pixels, size, 34, 46, 3, 6, 0);
+      setPixel(pixels, size, 35, 47, 1);
+      setPixel(pixels, size, 35, 49, 1);
+      setPixel(pixels, size, 35, 51, 1);
+      // Respirator bottom edge
+      hLine(pixels, size, 36, 63, 54, 0);
+
+      // Chin strap hints
+      vLine(pixels, size, 36, 44, 54, 0);
+    },
+    drawHeadgear(pixels, size, rng) {
+      // Mining headlamp on helmet top
+      const lampX = 52;
+      const lampY = 22;
+      // Lamp housing
+      fillRect(pixels, size, lampX - 3, lampY - 4, 7, 5, 1);
+      // Lamp lens
+      fillRect(pixels, size, lampX - 2, lampY - 3, 5, 3, 0);
+      fillRect(pixels, size, lampX - 1, lampY - 2, 3, 1, 1);
+      // Lamp mount bracket
+      vLine(pixels, size, lampX, lampY + 1, lampY + 3, 1);
+      // Helmet surface lines
+      for (let x = 38; x < 64; x += 6) {
+        vLine(pixels, size, x, 24, 36, 0);
+      }
+    },
+    drawDetails(pixels, size, rng) {
+      // Dust/scratches on helmet
+      if (rng() > 0.3) {
+        for (let i = 0; i < 4; i++) {
+          const sx = 36 + Math.floor(rng() * 24);
+          const sy = 24 + Math.floor(rng() * 12);
+          setPixel(pixels, size, sx, sy, 0);
+          setPixel(pixels, size, sx + 1, sy + 1, 0);
+        }
+      }
+      // Suit patches / insignia
+      if (rng() > 0.4) {
+        const patchY = 72;
+        fillRect(pixels, size, 10, patchY, 8, 6, 0);
+        fillRect(pixels, size, 11, patchY + 1, 6, 4, 1);
+        setPixel(pixels, size, 13, patchY + 2, 0);
+        setPixel(pixels, size, 14, patchY + 3, 0);
+        setPixel(pixels, size, 15, patchY + 2, 0);
+      }
+    }
+  },
+
+  // ════════════════════════════════════════════
+  //  INSECTOID
+  // ════════════════════════════════════════════
+  Insectoid: {
+    drawBody(pixels, size, rng) {
+      // Segmented thorax - 3-4 segments
+      const thoraxTop = 60;
+      const segCount = 3 + Math.floor(rng() * 2);
+      const segH = Math.floor((size - thoraxTop) / segCount);
+      for (let s = 0; s < segCount; s++) {
+        const segY = thoraxTop + s * segH;
+        const maxW = 28 + s * 5;
+        // Each segment: wider in middle, narrow at joints
+        for (let y = 0; y < segH; y++) {
+          const t = y / segH;
+          // Bell curve width within segment
+          const widthFactor = Math.sin(t * Math.PI);
+          const w = Math.floor(maxW * (0.6 + 0.4 * widthFactor));
+          hLine(pixels, size, 64 - w, 63, segY + y, 1);
+        }
+        // Joint line between segments
+        if (s < segCount - 1) {
+          const jointY = segY + segH - 1;
+          hLine(pixels, size, 64 - maxW + 6, 63, jointY, 0);
+        }
+        // Chitin plate texture on each segment
+        const midY = segY + Math.floor(segH / 2);
+        for (let x = 64 - maxW + 4; x < 64; x += 5) {
+          setPixel(pixels, size, x, midY, 0);
+          setPixel(pixels, size, x + 1, midY - 1, 0);
+          setPixel(pixels, size, x + 1, midY + 1, 0);
+        }
+      }
+      // Limb attachment points (small protrusions on first segment)
+      const armY = thoraxTop + 4;
+      fillRect(pixels, size, 64 - 32, armY, 4, 3, 1);
+      fillRect(pixels, size, 64 - 34, armY + 1, 2, 1, 1);
+    },
+    drawNeck(pixels, size, rng) {
+      // Thin insect neck
+      fillRect(pixels, size, 52, 48, 12, 14, 1);
+      // Neck segments
+      hLine(pixels, size, 53, 63, 52, 0);
+      hLine(pixels, size, 53, 63, 56, 0);
+    },
+    drawHead(pixels, size, rng) {
+      // Narrow angular head - pointed downward (inverted triangle-ish)
+      // Upper head wider, tapers to pointed chin
+      fillEllipse(pixels, size, 56, 30, 18, 14, 1);
+      // Angular jaw - carve to triangular shape
+      for (let y = 35; y < 48; y++) {
+        const taper = Math.floor((y - 35) * 1.2);
+        // Remove outer pixels to create angular shape
+        for (let x = 0; x < taper; x++) {
+          setPixel(pixels, size, 38 + x, y, 0);
+        }
+      }
+      // Pointed chin
+      fillTriangle(pixels, size, 48, 42, 63, 42, 56, 50, 1);
+      // Head carapace edge
+      hLine(pixels, size, 40, 63, 16, 1);
+      hLine(pixels, size, 38, 63, 17, 1);
+    },
+    drawFace(pixels, size, rng) {
+      // Large compound eyes - cluster pattern
+      // Left compound eye
+      fillEllipse(pixels, size, 44, 28, 8, 7, 0);
+      // Internal compound facets (honeycomb dots)
+      for (let ey = -5; ey <= 5; ey += 3) {
+        for (let ex = -6; ex <= 0; ex += 3) {
+          const dx = 44 + ex + ((ey % 2 === 0) ? 1 : 0);
+          const dy = 28 + ey;
+          if ((ex * ex) / 49 + (ey * ey) / 36 < 0.8) {
+            setPixel(pixels, size, dx, dy, 1);
+          }
+        }
+      }
+      // Right compound eye
+      fillEllipse(pixels, size, 58, 28, 6, 6, 0);
+      for (let ey = -4; ey <= 4; ey += 3) {
+        for (let ex = -4; ex <= 4; ex += 3) {
+          const dx = 58 + ex + ((ey % 2 === 0) ? 1 : 0);
+          const dy = 28 + ey;
+          if ((ex * ex) / 25 + (ey * ey) / 25 < 0.7) {
+            setPixel(pixels, size, dx, dy, 1);
+          }
+        }
+      }
+
+      // Mandibles - two pincers below head
+      // Left mandible
+      for (let i = 0; i < 8; i++) {
+        setPixel(pixels, size, 48 - Math.floor(i * 0.8), 44 + i, 1);
+        setPixel(pixels, size, 49 - Math.floor(i * 0.8), 44 + i, 1);
+        setPixel(pixels, size, 50 - Math.floor(i * 0.8), 44 + i, 1);
+      }
+      // Right mandible
+      for (let i = 0; i < 8; i++) {
+        setPixel(pixels, size, 58 + Math.floor(i * 0.3), 44 + i, 1);
+        setPixel(pixels, size, 59 + Math.floor(i * 0.3), 44 + i, 1);
+        setPixel(pixels, size, 60 + Math.floor(i * 0.3), 44 + i, 1);
+      }
+      // Mandible serration
+      for (let i = 0; i < 6; i += 2) {
+        setPixel(pixels, size, 47 - Math.floor(i * 0.8), 45 + i, 0);
+      }
+    },
+    drawHeadgear(pixels, size, rng) {
+      // Antennae - 2 stalks going up with slight curve
+      // Left antenna
+      for (let i = 0; i < 20; i++) {
+        const ax = 48 - Math.floor(i * 0.6) + Math.round(Math.sin(i * 0.15) * 2);
+        setPixel(pixels, size, ax, 16 - i, 1);
+        setPixel(pixels, size, ax + 1, 16 - i, 1);
+      }
+      // Left antenna tip bulb
+      fillEllipse(pixels, size, 38, -3, 2, 2, 1);
+
+      // Right antenna
+      for (let i = 0; i < 18; i++) {
+        const ax = 60 + Math.floor(i * 0.2) + Math.round(Math.sin(i * 0.2) * 1);
+        setPixel(pixels, size, ax, 16 - i, 1);
+        setPixel(pixels, size, ax + 1, 16 - i, 1);
+      }
+      // Right antenna tip
+      fillEllipse(pixels, size, 62, 0, 2, 2, 1);
+
+      // Head carapace ridge
+      hLine(pixels, size, 42, 63, 18, 0);
+    },
+    drawDetails(pixels, size, rng) {
+      // Chitin texture on head
+      for (let y = 20; y < 35; y += 4) {
+        for (let x = 42; x < 63; x += 5) {
+          if (rng() > 0.4) {
+            setPixel(pixels, size, x, y, 0);
+          }
+        }
+      }
+      // Wing stubs (small protrusions from upper thorax)
+      if (rng() > 0.3) {
+        const wingY = 62;
+        for (let i = 0; i < 6; i++) {
+          setPixel(pixels, size, 32 - i, wingY + i, 1);
+          setPixel(pixels, size, 33 - i, wingY + i, 1);
+          setPixel(pixels, size, 34 - i, wingY + i + 1, 1);
+        }
+      }
+      // Speckle pattern
+      for (let i = 0; i < 6; i++) {
+        const sx = 40 + Math.floor(rng() * 20);
+        const sy = 22 + Math.floor(rng() * 10);
+        setPixel(pixels, size, sx, sy, 0);
+      }
+    }
+  },
+
+  // ════════════════════════════════════════════
+  //  CONSTRUCT
+  // ════════════════════════════════════════════
+  Construct: {
+    drawBody(pixels, size, rng) {
+      // Angular geometric shoulders and boxy torso
+      const shoulderTop = 58;
+      // Shoulder plates - sharp angles, no curves
+      fillRect(pixels, size, 6, shoulderTop + 4, 58, 8, 1);
+      // Shoulder step
+      fillRect(pixels, size, 14, shoulderTop, 50, 4, 1);
+      // Body
+      fillRect(pixels, size, 14, shoulderTop + 12, 50, size - shoulderTop - 12, 1);
+
+      // Panel lines grid on torso
+      for (let y = shoulderTop + 16; y < size; y += 8) {
+        hLine(pixels, size, 16, 62, y, 0);
+      }
+      for (let x = 22; x < 64; x += 10) {
+        vLine(pixels, size, x, shoulderTop + 14, size - 1, 0);
+      }
+      // Chest plate center piece
+      fillRect(pixels, size, 46, shoulderTop + 14, 16, 12, 0);
+      fillRect(pixels, size, 48, shoulderTop + 16, 12, 8, 1);
+      // LED indicator in chest
+      fillRect(pixels, size, 52, shoulderTop + 18, 4, 4, 0);
+      fillRect(pixels, size, 53, shoulderTop + 19, 2, 2, 1);
+
+      // Shoulder rivets
+      for (let x = 10; x < 60; x += 8) {
+        setPixel(pixels, size, x, shoulderTop + 5, 0);
+        setPixel(pixels, size, x, shoulderTop + 10, 0);
+      }
+      // Shoulder joint mechanism
+      fillRect(pixels, size, 6, shoulderTop + 4, 4, 8, 0);
+      fillRect(pixels, size, 7, shoulderTop + 5, 2, 6, 1);
+    },
+    drawNeck(pixels, size, rng) {
+      // Mechanical neck connectors - two piston rods
+      fillRect(pixels, size, 46, 46, 6, 14, 1);
+      fillRect(pixels, size, 56, 46, 6, 14, 1);
+      // Gap between pistons
+      fillRect(pixels, size, 52, 46, 4, 14, 0);
+      // Piston detail lines
+      hLine(pixels, size, 46, 51, 50, 0);
+      hLine(pixels, size, 56, 61, 50, 0);
+      hLine(pixels, size, 46, 51, 54, 0);
+      hLine(pixels, size, 56, 61, 54, 0);
+      // Connector plate
+      fillRect(pixels, size, 44, 44, 20, 3, 1);
+      hLine(pixels, size, 44, 63, 43, 0);
+    },
+    drawHead(pixels, size, rng) {
+      // Perfectly rectangular head - NO rounded edges
+      fillRect(pixels, size, 34, 16, 30, 28, 1);
+      // Head edge definition
+      hLine(pixels, size, 34, 63, 16, 0);
+      hLine(pixels, size, 34, 63, 43, 0);
+      vLine(pixels, size, 34, 16, 43, 0);
+      // Internal frame lines
+      hLine(pixels, size, 36, 62, 18, 0);
+      hLine(pixels, size, 36, 62, 41, 0);
+      vLine(pixels, size, 36, 18, 41, 0);
+    },
+    drawFace(pixels, size, rng) {
+      // Horizontal sensor slit for eyes
+      fillRect(pixels, size, 37, 26, 25, 4, 0);
+      // Sensor glow inside slit
+      fillRect(pixels, size, 39, 27, 21, 2, 1);
+      // Individual sensor dots
+      for (let x = 40; x < 60; x += 4) {
+        setPixel(pixels, size, x, 27, 0);
+        setPixel(pixels, size, x, 28, 0);
+      }
+
+      // Speaker grille for mouth area - horizontal lines
+      for (let y = 34; y < 41; y += 2) {
+        hLine(pixels, size, 40, 60, y, 0);
+      }
+      // Grille border
+      fillRect(pixels, size, 38, 33, 1, 9, 0);
+      fillRect(pixels, size, 62, 33, 1, 9, 0);
+      hLine(pixels, size, 38, 62, 33, 0);
+      hLine(pixels, size, 38, 62, 41, 0);
+    },
+    drawHeadgear(pixels, size, rng) {
+      // Sensor antenna - thin rod with circle on top
+      const antennaX = 56;
+      vLine(pixels, size, antennaX, 2, 16, 1);
+      vLine(pixels, size, antennaX + 1, 2, 16, 1);
+      // Antenna tip - small sensor ball
+      fillEllipse(pixels, size, antennaX, 2, 3, 3, 1);
+      // Sensor detail
+      setPixel(pixels, size, antennaX, 2, 0);
+      // Antenna base bracket
+      fillRect(pixels, size, 54, 14, 6, 3, 1);
+    },
+    drawDetails(pixels, size, rng) {
+      // Serial number / markings on head side
+      const markY = 20;
+      for (let i = 0; i < 4; i++) {
+        const on = rng() > 0.4;
+        if (on) {
+          fillRect(pixels, size, 37 + i * 3, markY, 2, 3, 0);
+        }
+      }
+      // Status LEDs on body
+      const ledY = 68;
+      for (let i = 0; i < 3; i++) {
+        setPixel(pixels, size, 60, ledY + i * 4, 0);
+        setPixel(pixels, size, 61, ledY + i * 4, 0);
+      }
+      // Wear marks / scratches
+      if (rng() > 0.3) {
+        for (let i = 0; i < 3; i++) {
+          const sx = 38 + Math.floor(rng() * 20);
+          const sy = 20 + Math.floor(rng() * 20);
+          setPixel(pixels, size, sx, sy, 0);
+          setPixel(pixels, size, sx + 1, sy, 0);
+        }
+      }
+      // Panel screws on body
+      for (let y = 70; y < size - 4; y += 12) {
+        for (let x = 18; x < 60; x += 14) {
+          setPixel(pixels, size, x, y, 0);
+          setPixel(pixels, size, x + 1, y, 0);
+          setPixel(pixels, size, x, y + 1, 0);
+        }
+      }
+    }
+  }
 };
 
 // ── Portrait Generation ──
 function generatePortrait(race, rng) {
-  const template = RACE_TEMPLATES[race];
-  const size = 32;
+  const size = 128;
   const pixels = new Uint8Array(size * size);
 
-  for (let y = 0; y < size; y++) {
-    const row = template[y];
-    for (let x = 0; x < size / 2; x++) {
-      const ch = row[x];
-      let filled = 0;
-      if (ch === '#') filled = 1;
-      else if (ch === 'x') filled = rng() > 0.5 ? 1 : 0;
+  const drawer = RACE_DRAWERS[race];
 
-      // Set left side
-      pixels[y * size + x] = filled;
-      // Mirror to right side
-      pixels[y * size + (size - 1 - x)] = filled;
+  // Draw layers bottom to top
+  drawer.drawBody(pixels, size, rng);
+  drawer.drawNeck(pixels, size, rng);
+  drawer.drawHead(pixels, size, rng);
+  drawer.drawFace(pixels, size, rng);
+  drawer.drawHeadgear(pixels, size, rng);
+  drawer.drawDetails(pixels, size, rng);
+
+  // Apply symmetry: mirror left half to right
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size / 2; x++) {
+      pixels[y * size + (size - 1 - x)] = pixels[y * size + x];
     }
   }
 
@@ -382,10 +1102,10 @@ function renderCard(character) {
 
   // Portrait canvas
   const canvas = document.createElement('canvas');
-  canvas.width = 32;
-  canvas.height = 32;
+  canvas.width = 128;
+  canvas.height = 128;
   const ctx = canvas.getContext('2d');
-  const imageData = ctx.createImageData(32, 32);
+  const imageData = ctx.createImageData(128, 128);
 
   for (let i = 0; i < character.portrait.length; i++) {
     const v = character.portrait[i] ? 255 : 0;
