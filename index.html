@@ -337,6 +337,99 @@ const RACE_TEMPLATES = {
     '...#############', // row 31
   ],
 };
+
+// ── Portrait Generation ──
+function generatePortrait(race, rng) {
+  const template = RACE_TEMPLATES[race];
+  const size = 32;
+  const pixels = new Uint8Array(size * size);
+
+  for (let y = 0; y < size; y++) {
+    const row = template[y];
+    for (let x = 0; x < size / 2; x++) {
+      const ch = row[x];
+      let filled = 0;
+      if (ch === '#') filled = 1;
+      else if (ch === 'x') filled = rng() > 0.5 ? 1 : 0;
+
+      // Set left side
+      pixels[y * size + x] = filled;
+      // Mirror to right side
+      pixels[y * size + (size - 1 - x)] = filled;
+    }
+  }
+
+  return pixels;
+}
+
+function generateCharacter(race, seed) {
+  const rng = createRNG(seed);
+  return {
+    name: generateName(race, rng),
+    race: race,
+    portrait: generatePortrait(race, rng),
+    seed: seed,
+  };
+}
+
+// ── Card Rendering ──
+function renderCard(character) {
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.dataset.seed = character.seed;
+
+  // Portrait canvas
+  const canvas = document.createElement('canvas');
+  canvas.width = 32;
+  canvas.height = 32;
+  const ctx = canvas.getContext('2d');
+  const imageData = ctx.createImageData(32, 32);
+
+  for (let i = 0; i < character.portrait.length; i++) {
+    const v = character.portrait[i] ? 255 : 0;
+    const idx = i * 4;
+    imageData.data[idx] = v;     // R
+    imageData.data[idx + 1] = v; // G
+    imageData.data[idx + 2] = v; // B
+    imageData.data[idx + 3] = 255; // A
+  }
+  ctx.putImageData(imageData, 0, 0);
+
+  // Name label
+  const name = document.createElement('div');
+  name.className = 'name';
+  name.textContent = character.name;
+
+  // Race tag
+  const tag = document.createElement('div');
+  tag.className = 'race-tag';
+  tag.textContent = character.race;
+
+  card.appendChild(canvas);
+  card.appendChild(name);
+  card.appendChild(tag);
+
+  return card;
+}
+
+const RACES = ['Human', 'Tharn', 'Cephalid', 'Gravborn', 'Insectoid', 'Construct'];
+
+function generateRoster() {
+  return RACES.map(race => generateCharacter(race, Math.floor(Math.random() * 100000)));
+}
+
+let roster = generateRoster();
+
+function renderSelectionScreen() {
+  const grid = document.getElementById('card-grid');
+  grid.innerHTML = '';
+  roster.forEach((char, i) => {
+    const card = renderCard(char);
+    grid.appendChild(card);
+  });
+}
+
+renderSelectionScreen();
   </script>
 </body>
 </html>
