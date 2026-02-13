@@ -116,6 +116,227 @@ function generateName(race, rng) {
   if (race === 'Construct') return first + '-' + last;
   return first.charAt(0).toUpperCase() + first.slice(1) + ' ' + last.charAt(0).toUpperCase() + last.slice(1);
 }
+
+// ── Race Templates (16 wide x 32 tall, left half only) ──
+// '#' = always filled, '.' = always empty, 'x' = variable (seed-driven)
+// Right edge (col 15) = character center. Col 0 = outermost edge after mirror.
+const RACE_TEMPLATES = {
+  // Human: Standard round head, normal neck, straight shoulders
+  Human: [
+    '................', // row 0  - empty top
+    '................', // row 1
+    '................', // row 2
+    '..........######', // row 3  - top of head
+    '.........#######', // row 4
+    '........########', // row 5  - head widens
+    '.......#########', // row 6
+    '.......####x####', // row 7  - forehead, variable hairline
+    '.......#########', // row 8  - brow
+    '.......##x##.###', // row 9  - eye area (gap=eye)
+    '.......#########', // row 10 - nose bridge
+    '.......####..x##', // row 11 - cheek area
+    '........####.x##', // row 12 - mouth area
+    '........########', // row 13 - chin
+    '.........#######', // row 14 - jaw line
+    '..........######', // row 15 - neck top
+    '...........#####', // row 16 - neck
+    '...........#####', // row 17 - neck base
+    '......##########', // row 18 - shoulders begin
+    '....############', // row 19 - shoulders widen
+    '..##############', // row 20 - full shoulders
+    '.###############', // row 21
+    '.###x###########', // row 22 - body with variable detail
+    '.###############', // row 23
+    '..#####x########', // row 24 - torso detail
+    '..##############', // row 25
+    '..##############', // row 26
+    '..##############', // row 27
+    '..##############', // row 28
+    '..##############', // row 29
+    '..##############', // row 30
+    '..##############', // row 31
+  ],
+
+  // Tharn: Wide skull, bony ridges, thick neck, massive shoulders, heavy jaw
+  Tharn: [
+    '................', // row 0
+    '.........#......', // row 1  - cranial ridge tip
+    '........###.....', // row 2  - ridge widens
+    '.......####.#.##', // row 3  - ridge + dome top
+    '.......#########', // row 4  - skull top
+    '......##########', // row 5  - wide skull
+    '.....###########', // row 6
+    '.....######x####', // row 7  - brow ridge (heavy)
+    '.....###########', // row 8  - brow
+    '.....###x##.####', // row 9  - deep-set eye
+    '.....###########', // row 10 - nose area
+    '.....###########', // row 11 - heavy cheek
+    '....############', // row 12 - wide jaw
+    '....######x#.x##', // row 13 - jaw detail/tusks
+    '....############', // row 14 - jaw base
+    '.....###########', // row 15 - chin
+    '......##########', // row 16 - thick neck top
+    '.....###########', // row 17 - thick neck
+    '....############', // row 18 - neck to shoulder
+    '..##############', // row 19 - massive shoulders
+    '.###############', // row 20
+    '################', // row 21 - widest point
+    '################', // row 22
+    '###x############', // row 23 - armor/plate detail
+    '################', // row 24
+    '####x###########', // row 25 - body marking
+    '################', // row 26
+    '################', // row 27
+    '################', // row 28
+    '################', // row 29
+    '################', // row 30
+    '################', // row 31
+  ],
+
+  // Cephalid: Bulbous oversized dome, tentacles from lower face, thin neck
+  Cephalid: [
+    '................', // row 0
+    '..........######', // row 1  - dome top
+    '.......#########', // row 2  - dome widens fast
+    '.....###########', // row 3
+    '....############', // row 4  - very wide dome
+    '...#############', // row 5
+    '..##############', // row 6  - widest dome
+    '..##############', // row 7
+    '..####x#########', // row 8  - surface veins/texture
+    '..##############', // row 9
+    '...########.####', // row 10 - large eye area
+    '...#############', // row 11 - below eye
+    '....########x.##', // row 12 - face narrows
+    '.....########.##', // row 13 - tentacle roots
+    '......##.##.#.##', // row 14 - tentacles separate
+    '.......#..#.#.##', // row 15 - tentacles hang
+    '.......#..#.#..#', // row 16 - tentacles dangle
+    '........#.#..#.#', // row 17 - tentacle tips
+    '........#.#..#..', // row 18 - tentacle ends
+    '.........x...x..', // row 19 - tentacle tips variable
+    '................', // row 20 - gap
+    '...........#####', // row 21 - thin neck
+    '...........#####', // row 22
+    '.........#######', // row 23 - narrow shoulders
+    '........########', // row 24
+    '.......#########', // row 25 - modest body
+    '......##########', // row 26
+    '......##x#######', // row 27 - robe/clothing detail
+    '......##########', // row 28
+    '.....###########', // row 29
+    '.....###########', // row 30
+    '.....###########', // row 31
+  ],
+
+  // Gravborn: Short/stocky, starts lower in frame, visor, respirator, very wide
+  Gravborn: [
+    '................', // row 0
+    '................', // row 1
+    '................', // row 2
+    '................', // row 3
+    '................', // row 4
+    '................', // row 5
+    '................', // row 6
+    '..........######', // row 7  - helmet/head top (starts low)
+    '.........#######', // row 8
+    '........########', // row 9  - head widens
+    '........########', // row 10
+    '.......#########', // row 11 - visor band
+    '.......####.####', // row 12 - visor slit (eye area)
+    '.......#########', // row 13 - visor band bottom
+    '.......###xx####', // row 14 - respirator top
+    '........##.#.###', // row 15 - respirator grille
+    '........##.#.###', // row 16 - respirator detail
+    '........########', // row 17 - mask base
+    '.........#######', // row 18 - neck (short)
+    '.....###########', // row 19 - shoulders (very wide for height)
+    '...#############', // row 20
+    '..##############', // row 21
+    '.###############', // row 22 - massive wide torso
+    '################', // row 23
+    '################', // row 24 - stocky body
+    '###x############', // row 25 - equipment detail
+    '################', // row 26
+    '####x###########', // row 27 - belt/tool detail
+    '################', // row 28
+    '################', // row 29
+    '################', // row 30
+    '################', // row 31
+  ],
+
+  // Insectoid: Antennae on top, narrow angular head, compound eye, segmented thorax
+  Insectoid: [
+    '..............#.', // row 0  - antenna tip left
+    '.............#..', // row 1  - antenna stalk
+    '............#...', // row 2  - antenna angles in
+    '...........#..##', // row 3  - antenna base + head top
+    '..........######', // row 4  - narrow head top
+    '..........######', // row 5
+    '.........#######', // row 6  - head
+    '.........##x####', // row 7  - compound eye area
+    '.........#.x####', // row 8  - compound eye dots
+    '.........#######', // row 9
+    '..........#####x', // row 10 - mandible area
+    '...........####.', // row 11 - narrow jaw
+    '...........###.#', // row 12 - mandible detail
+    '............####', // row 13 - thin neck
+    '............####', // row 14
+    '...........#####', // row 15 - thorax segment 1 top
+    '..........######', // row 16
+    '.........#######', // row 17 - thorax widens
+    '.........#######', // row 18 - segment 1
+    '..........######', // row 19 - segment joint (narrows)
+    '.........#######', // row 20 - segment 2
+    '........########', // row 21
+    '........########', // row 22 - widest thorax
+    '.........#######', // row 23 - segment joint
+    '........########', // row 24 - segment 3
+    '.......####x####', // row 25 - pattern detail
+    '.......#########', // row 26
+    '........########', // row 27 - segment joint
+    '.......#########', // row 28 - abdomen
+    '.......#########', // row 29
+    '........########', // row 30
+    '.........#######', // row 31 - abdomen tapers
+  ],
+
+  // Construct: Flat-top rectangle head, antenna/sensor, angular, boxy, geometric
+  Construct: [
+    '................', // row 0
+    '................', // row 1
+    '..............##', // row 2  - antenna top
+    '..............##', // row 3  - antenna stalk
+    '.............###', // row 4  - antenna base
+    '.........#######', // row 5  - flat head top (sharp edge)
+    '.........#######', // row 6
+    '.........#######', // row 7  - rectangular head
+    '.........#######', // row 8
+    '.........###.###', // row 9  - sensor/eye slot
+    '.........#######', // row 10
+    '.........###..##', // row 11 - speaker grille
+    '.........###..##', // row 12 - speaker grille
+    '.........#######', // row 13 - head bottom
+    '..........#####.', // row 14 - neck connector top
+    '...........####.', // row 15 - neck piston
+    '...........####.', // row 16 - neck piston
+    '..........#####.', // row 17 - neck connector bottom
+    '......##########', // row 18 - shoulder plate
+    '....############', // row 19 - angular shoulders
+    '...#############', // row 20
+    '...#############', // row 21 - boxy torso
+    '...#############', // row 22
+    '...###.#########', // row 23 - chest panel line
+    '...###.#########', // row 24
+    '...#############', // row 25
+    '...##.##########', // row 26 - panel detail
+    '...#############', // row 27
+    '...#############', // row 28
+    '...#############', // row 29
+    '...#############', // row 30
+    '...#############', // row 31
+  ],
+};
   </script>
 </body>
 </html>
