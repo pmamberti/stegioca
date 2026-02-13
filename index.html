@@ -425,9 +425,116 @@ function renderSelectionScreen() {
   grid.innerHTML = '';
   roster.forEach((char, i) => {
     const card = renderCard(char);
+    card.addEventListener('click', () => handleCardClick(i));
     grid.appendChild(card);
   });
 }
+
+// ── Game State ──
+let selectedIndices = [];
+
+function updateSelectionUI() {
+  const counter = document.getElementById('selection-counter');
+  const btn = document.getElementById('btn-start');
+  counter.textContent = `${selectedIndices.length} / 2 selected`;
+  btn.disabled = selectedIndices.length !== 2;
+
+  document.querySelectorAll('.card').forEach((card, i) => {
+    card.classList.toggle('selected', selectedIndices.includes(i));
+  });
+}
+
+function handleCardClick(index) {
+  const pos = selectedIndices.indexOf(index);
+  if (pos !== -1) {
+    selectedIndices.splice(pos, 1);
+  } else if (selectedIndices.length < 2) {
+    selectedIndices.push(index);
+  }
+  updateSelectionUI();
+}
+
+// ── Screen Switching ──
+function showScreen(screenId) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(screenId).classList.add('active');
+}
+
+// ── Mission Flow ──
+document.getElementById('btn-start').addEventListener('click', () => {
+  startMission();
+});
+
+function startMission() {
+  const selected = selectedIndices.map(i => roster[i]);
+  showScreen('screen-waiting');
+  renderWaitingScreen(selected);
+  setTimeout(() => showResult(selected), 5000);
+}
+
+// ── Waiting Screen ──
+function renderWaitingScreen(selected) {
+  const container = document.getElementById('waiting-cards');
+  container.innerHTML = '';
+  selected.forEach(char => container.appendChild(renderCard(char)));
+}
+
+// ── Narrative Pools ──
+const NARRATIVES = {
+  success: [
+    "{name1} drew their fire while {name2} secured the objective. Clean extraction.",
+    "{name2} almost blew the cover, but {name1} improvised. Mission complete.",
+    "Textbook operation. {name1} and {name2} made it look easy.",
+    "{name1} cracked the encryption. {name2} held the corridor. Data secured.",
+    "Against the odds, {name2} found an alternate route. {name1} covered the exit.",
+    "{name1} and {name2} moved like they'd trained together for years. Flawless.",
+    "The target never saw {name2} coming. {name1} handled the getaway.",
+    "{name1} took point. {name2} watched their six. Not a scratch on either.",
+    "Messy start, clean finish. {name2} adapted fast. {name1} kept their nerve.",
+    "{name1} disabled the alarms. {name2} grabbed the payload. In and out.",
+  ],
+  failure: [
+    "{name1} took a hit in the first corridor. {name2} dragged them out. No payload.",
+    "Bad intel. {name1} and {name2} walked into a trap. Barely made it back.",
+    "{name2} froze under fire. {name1} called the abort. Live to fight another day.",
+    "The lock was military-grade. {name1} couldn't crack it. {name2} burned through their ammo covering.",
+    "{name1} and {name2} got separated in the smoke. Extraction was ugly.",
+    "Target was already gone. {name1} and {name2} spent three hours in a dead facility.",
+    "{name2} tripped a silent alarm. By the time {name1} noticed, it was too late.",
+    "Comms went dark ten minutes in. {name1} and {name2} had to improvise an exit.",
+    "The briefing said light resistance. It wasn't. {name2} got {name1} out, but that's all.",
+    "{name1} made the call to pull out. {name2} disagreed, but they're both alive.",
+  ],
+};
+
+// ── Result Screen ──
+function showResult(selected) {
+  const success = Math.random() < 0.5;
+  const pool = success ? NARRATIVES.success : NARRATIVES.failure;
+  const template = pool[Math.floor(Math.random() * pool.length)];
+  const narrative = template
+    .replace(/\{name1\}/g, selected[0].name)
+    .replace(/\{name2\}/g, selected[1].name);
+
+  document.getElementById('result-heading').textContent = success ? 'MISSION SUCCESS' : 'MISSION FAILED';
+  document.getElementById('result-heading').style.color = success ? '#fff' : '#888';
+  document.getElementById('result-narrative').textContent = narrative;
+
+  const container = document.getElementById('result-cards');
+  container.innerHTML = '';
+  selected.forEach(char => container.appendChild(renderCard(char)));
+
+  showScreen('screen-result');
+}
+
+// ── New Mission ──
+document.getElementById('btn-new-mission').addEventListener('click', () => {
+  selectedIndices = [];
+  roster = generateRoster();
+  renderSelectionScreen();
+  updateSelectionUI();
+  showScreen('screen-selection');
+});
 
 renderSelectionScreen();
   </script>
